@@ -2,99 +2,107 @@ import java.util.*;
 
 /**
  * ============================================================
- * MAIN CLASS - UseCase7AddOnServiceSelection
+ * MAIN CLASS - UseCase9ErrorHandlingValidation
  * ============================================================
  *
- * Use Case 7: Add-On Service Selection
+ * Use Case 9: Error Handling & Validation
  *
  * Description:
- * Allows attaching optional services to reservations
- * without modifying booking or inventory logic.
+ * Demonstrates validation and custom exception handling
+ * to ensure system reliability.
  *
  * @author Developer
- * @version 7.1
+ * @version 9.1
  */
- class UseCase7AddOnServiceSelection {
+ class UseCase9ErrorHandlingValidation {
 
     public static void main(String[] args) {
 
-        // Sample reservation IDs (from UC6)
-        String reservationId1 = "R101";
-        String reservationId2 = "R102";
+        RoomInventory inventory = new RoomInventory();
 
-        // Create service manager
-        AddOnServiceManager manager = new AddOnServiceManager();
+        BookingService service = new BookingService(inventory);
 
-        // Add services to reservations
-        manager.addService(reservationId1, new AddOnService("Breakfast", 200));
-        manager.addService(reservationId1, new AddOnService("WiFi", 100));
-        manager.addService(reservationId2, new AddOnService("Airport Pickup", 500));
+        try {
+            // Valid booking
+            service.bookRoom("Alice", "Single");
 
-        // Display services and cost
-        manager.showServices(reservationId1);
-        manager.showServices(reservationId2);
+            // Invalid room type
+            service.bookRoom("Bob", "Luxury");
+
+            // Exhaust stock
+            service.bookRoom("Charlie", "Single");
+            service.bookRoom("David", "Single"); // should fail
+
+        } catch (BookingException e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+
+        System.out.println("\nSystem continues running safely...");
     }
 }
 
 /**
- * Add-On Service class
+ * Custom Exception
  */
-class AddOnService {
-
-    private String name;
-    private double cost;
-
-    public AddOnService(String name, double cost) {
-        this.name = name;
-        this.cost = cost;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public double getCost() {
-        return cost;
+class BookingException extends Exception {
+    public BookingException(String message) {
+        super(message);
     }
 }
 
 /**
- * Add-On Service Manager
+ * Inventory Service
  */
-class AddOnServiceManager {
+class RoomInventory {
 
-    // Map: reservationId → list of services
-    private HashMap<String, List<AddOnService>> serviceMap = new HashMap<>();
+    private HashMap<String, Integer> map = new HashMap<>();
 
-    // Add service
-    public void addService(String reservationId, AddOnService service) {
-
-        serviceMap.putIfAbsent(reservationId, new ArrayList<>());
-        serviceMap.get(reservationId).add(service);
-
-        System.out.println("Added service: " + service.getName() +
-                " to Reservation: " + reservationId);
+    public RoomInventory() {
+        map.put("Single", 2);
+        map.put("Double", 1);
+        map.put("Suite", 1);
     }
 
-    // Show services + total cost
-    public void showServices(String reservationId) {
+    public boolean isValidRoomType(String type) {
+        return map.containsKey(type);
+    }
 
-        List<AddOnService> services = serviceMap.get(reservationId);
+    public int getAvailability(String type) {
+        return map.getOrDefault(type, 0);
+    }
 
-        if (services == null || services.isEmpty()) {
-            System.out.println("\nNo services for " + reservationId);
-            return;
+    public void decrement(String type) {
+        map.put(type, map.get(type) - 1);
+    }
+}
+
+/**
+ * Booking Service with validation
+ */
+class BookingService {
+
+    private RoomInventory inventory;
+
+    public BookingService(RoomInventory inventory) {
+        this.inventory = inventory;
+    }
+
+    public void bookRoom(String guest, String roomType) throws BookingException {
+
+        // Validate room type
+        if (!inventory.isValidRoomType(roomType)) {
+            throw new BookingException("Invalid room type: " + roomType);
         }
 
-        double total = 0;
-
-        System.out.println("\nServices for " + reservationId + ":");
-
-        for (AddOnService s : services) {
-            System.out.println("- " + s.getName() + " ₹" + s.getCost());
-            total += s.getCost();
+        // Validate availability
+        if (inventory.getAvailability(roomType) <= 0) {
+            throw new BookingException("No rooms available for type: " + roomType);
         }
 
-        System.out.println("Total Add-On Cost: ₹" + total);
+        // Safe update
+        inventory.decrement(roomType);
+
+        System.out.println("Booking successful: " +
+                guest + " → " + roomType);
     }
 }
