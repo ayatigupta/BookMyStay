@@ -1,108 +1,104 @@
 import java.util.*;
 
 /**
- * ============================================================
- * MAIN CLASS - UseCase9ErrorHandlingValidation
- * ============================================================
- *
- * Use Case 9: Error Handling & Validation
- *
- * Description:
- * Demonstrates validation and custom exception handling
- * to ensure system reliability.
- *
- * @author Developer
- * @version 9.1
+ * Use Case 11: Concurrent Booking Simulation
  */
- class UseCase9ErrorHandlingValidation {
+class UseCase11ConcurrentBookingSimulation {
 
     public static void main(String[] args) {
 
         RoomInventory inventory = new RoomInventory();
 
-        BookingService service = new BookingService(inventory);
+        // Shared booking queue
+        Queue<Reservation> queue = new LinkedList<>();
 
-        try {
-            // Valid booking
-            service.bookRoom("Alice", "Single");
+        // Add multiple requests
+        queue.offer(new Reservation("Alice", "Single"));
+        queue.offer(new Reservation("Bob", "Single"));
+        queue.offer(new Reservation("Charlie", "Single"));
+        queue.offer(new Reservation("David", "Single"));
 
-            // Invalid room type
-            service.bookRoom("Bob", "Luxury");
+        // Create threads (simulate multiple users)
+        Thread t1 = new Thread(new BookingProcessor(queue, inventory));
+        Thread t2 = new Thread(new BookingProcessor(queue, inventory));
 
-            // Exhaust stock
-            service.bookRoom("Charlie", "Single");
-            service.bookRoom("David", "Single"); // should fail
-
-        } catch (BookingException e) {
-            System.out.println("Error: " + e.getMessage());
-        }
-
-        System.out.println("\nSystem continues running safely...");
+        t1.start();
+        t2.start();
     }
 }
 
 /**
- * Custom Exception
+ * Reservation class
  */
-class BookingException extends Exception {
-    public BookingException(String message) {
-        super(message);
+class Reservation {
+    String guestName;
+    String roomType;
+
+    public Reservation(String guestName, String roomType) {
+        this.guestName = guestName;
+        this.roomType = roomType;
     }
 }
 
 /**
- * Inventory Service
+ * Inventory (shared resource)
  */
 class RoomInventory {
 
     private HashMap<String, Integer> map = new HashMap<>();
 
     public RoomInventory() {
-        map.put("Single", 2);
-        map.put("Double", 1);
-        map.put("Suite", 1);
+        map.put("Single", 2); // limited stock
     }
 
-    public boolean isValidRoomType(String type) {
-        return map.containsKey(type);
-    }
+    public synchronized boolean allocateRoom(String type) {
 
-    public int getAvailability(String type) {
-        return map.getOrDefault(type, 0);
-    }
+        int available = map.getOrDefault(type, 0);
 
-    public void decrement(String type) {
-        map.put(type, map.get(type) - 1);
+        if (available > 0) {
+            map.put(type, available - 1);
+            return true;
+        }
+
+        return false;
     }
 }
 
 /**
- * Booking Service with validation
+ * Booking Processor (Runnable)
  */
-class BookingService {
+class BookingProcessor implements Runnable {
 
+    private Queue<Reservation> queue;
     private RoomInventory inventory;
 
-    public BookingService(RoomInventory inventory) {
+    public BookingProcessor(Queue<Reservation> queue, RoomInventory inventory) {
+        this.queue = queue;
         this.inventory = inventory;
     }
 
-    public void bookRoom(String guest, String roomType) throws BookingException {
+    public void run() {
 
-        // Validate room type
-        if (!inventory.isValidRoomType(roomType)) {
-            throw new BookingException("Invalid room type: " + roomType);
+        while (true) {
+
+            Reservation r;
+
+            // Critical section: accessing shared queue
+            synchronized (queue) {
+                if (queue.isEmpty()) break;
+                r = queue.poll();
+            }
+
+            // Critical section: inventory update
+            boolean success = inventory.allocateRoom(r.roomType);
+
+            if (success) {
+                System.out.println(Thread.currentThread().getName() +
+                        " → Booking Confirmed: " + r.guestName);
+            } else {
+                System.out.println(Thread.currentThread().getName() +
+                        " → Booking Failed: " + r.guestName);
+            }
         }
-
-        // Validate availability
-        if (inventory.getAvailability(roomType) <= 0) {
-            throw new BookingException("No rooms available for type: " + roomType);
-        }
-
-        // Safe update
-        inventory.decrement(roomType);
-
-        System.out.println("Booking successful: " +
-                guest + " → " + roomType);
     }
 }
